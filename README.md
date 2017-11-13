@@ -19,7 +19,7 @@ Sensor IDs and MQTT connection details are hardcoded. Alter to fit your configur
 
 Direction | Topic | Notes
 --- | --- | ---
-OUT | beer/server - a string with `offline` or `online`
+OUT | beer/server | a string with `offline` or `online`
 IN/OUT | beer/brew?/heater | a string with `on` or `off`. This value can be set
 IN | beer/brew?/min_temp | a float value set to min temp value (heater triggered to enable)
 IN | beer/brew?/max_temp | a float value set to max temp value (heater triggered to disable)
