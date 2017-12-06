@@ -24,7 +24,8 @@ import mosquitto as mqtt
 power = ener.Energenie()
 is_connected = False
 is_first = True
-brew = [{"heater":False,"min":20,"max":21}, {"heater":False,"min":20,"max":21}]
+brew = [{"heater":False,"heatctl":1,"min":20,"max":21,"sensor":ds18b20("28-0517022710ff")},
+        {"heater":False,"heatctl":2,"min":20,"max":21,"sensor":ds18b20("28-041702ce85ff")}]
 
 def mqtt_connect(client, userdata, rc):
   global is_connected
@@ -63,7 +64,6 @@ def on_message(client, userdata, msg):
       pass
     
 try:
-  sensors = [ds18b20("28-0517022710ff"), ds18b20("28-041702ce85ff")]
   client= mqtt.Mosquitto()
   client.on_connect = mqtt_connect
   client.on_message = on_message
@@ -79,17 +79,17 @@ try:
         is_first = False
 
       # Iterate through sensors
-      for s in range(len(sensors)):
-        temp = sensors[s].temperature
+      for s in range(len(brew)):
+        temp = brew[s]["sensor"].temperature
         client.publish("beer/brew{0}/temperature".format(s+1), temp)
 
         # Check temperature. Set heater
         if temp != -273.0:
           try:
-            if brew[s]["min"] > temp:
+            if brew[s]["min"] > temp and not brew[s]["heater"]:
               brew[s]["heater"] = True
               client.publish("beer/brew{0}/heater".format(s+1), "on", 2, True)
-            elif brew[s]["max"] < temp:
+            elif brew[s]["max"] < temp and brew[s]["heater"]:
               brew[s]["heater"] = False
               client.publish("beer/brew{0}/heater".format(s+1), "off", 2, True)
           except KeyError:
@@ -100,11 +100,13 @@ try:
       # Control heater. Keep sending the signal since it isn't reliable
       for i in range(len(brew)):
         try:
-          power.switch(i+1, brew[i]["heater"])
+          power.switch(brew[i]["heatctl"], brew[i]["heater"])
+          #time.sleep(0.1) # Small sleep between switches
         except EnerError:
-          pass
+          print("Error switching brew {0}".format(brew[i]["heatctl"]))
+          #pass
 
-      
+    # Pause for 5 seconds and read again
     time.sleep(5)
  
 except KeyboardInterrupt:
