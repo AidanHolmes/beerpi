@@ -42,7 +42,9 @@ def mqtt_connect(client, userdata, rc):
 
 def mqtt_disconnect(client, userdata, rc):
   global is_connected
+  global is_first
   is_connected = False
+  is_first = False
   
 def on_message(client, userdata, msg):
   global brew
@@ -63,20 +65,23 @@ def on_message(client, userdata, msg):
     except EnerError:
       pass
     
-try:
-  client= mqtt.Mosquitto()
-  client.on_connect = mqtt_connect
-  client.on_message = on_message
-  client.on_disconnect = mqtt_disconnect
-  client.will_set("beer/server", "offline", 2, True)
-  client.connect_async("192.168.1.200")
-  client.loop_start()
+while 1:
+  try:
+    if not is_connected:
+      client= mqtt.Mosquitto()
+      client.on_connect = mqtt_connect
+      client.on_message = on_message
+      client.on_disconnect = mqtt_disconnect
+      client.will_set("beer/server", "offline", 2, True)
+      client.connect_async("192.168.1.200")
+      client.loop_start()
+    # end if is_connected
 
-  while 1:
-    if (is_connected):
-      if (is_first):
+    if is_connected:
+      if is_first:
         client.publish("beer/server", "online", 2, True)
         is_first = False
+      # end if is_first
 
       # Iterate through sensors
       for s in range(len(brew)):
@@ -92,10 +97,13 @@ try:
             elif brew[s]["max"] < temp and brew[s]["heater"]:
               brew[s]["heater"] = False
               client.publish("beer/brew{0}/heater".format(s+1), "off", 2, True)
+            # end if
           except KeyError:
             pass
           except IndexError:
             pass
+          # end try
+        # end if
 
       # Control heater. Keep sending the signal since it isn't reliable
       for i in range(len(brew)):
@@ -104,13 +112,26 @@ try:
           #time.sleep(0.1) # Small sleep between switches
         except EnerError:
           print("Error switching brew {0}".format(brew[i]["heatctl"]))
-          #pass
+        # end try
+      # end for
 
     # Pause for 5 seconds and read again
     time.sleep(5)
- 
-except KeyboardInterrupt:
-  power.cleanup()
-  client.loop_stop()
-  if (is_connected):
-    client.disconnect()
+
+  except KeyboardInterrupt:
+    power.cleanup()
+    client.loop_stop()
+    if (is_connected):
+      client.disconnect()
+    quit()
+  except SocketError as e:
+    is_connected = False
+    is_first = False
+    if e.errno == errno.ECONNRESET:
+      print ("Connection reset, attepmting to reconnect in 30 sec...")
+      time.sleep(30)
+    else:
+      print ("A problem occurred with the connection. Attemping to reconnect in 5 min")
+      time.sleep(300)
+  # end try
+# end loop while 1
